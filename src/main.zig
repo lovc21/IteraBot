@@ -1,27 +1,30 @@
-const std = @import("std");
-const IteraBot = @import("IteraBot");
+const root = @import("root.zig");
+pub const std = root.std;
+const Cli = root.cli.Cli;
 
 pub fn main() !void {
-    // Prints to stderr, ignoring potential errors.
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
-    try IteraBot.bufferedPrint();
-}
+    var gpa = std.heap.DebugAllocator(.{}){};
+    defer _ = gpa.deinit();
+    const allocator = gpa.allocator();
 
-test "simple test" {
-    const gpa = std.testing.allocator;
-    var list: std.ArrayList(i32) = .empty;
-    defer list.deinit(gpa); // Try commenting this out and see if zig detects the memory leak!
-    try list.append(gpa, 42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
-}
+    var stdout_buf: [256]u8 = undefined;
+    var stdin_buf: [256]u8 = undefined;
+    var stderr_buf: [256]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buf);
+    var stdin_reader = std.fs.File.stdin().reader(&stdin_buf);
+    var stderr_writer = std.fs.File.stderr().writer(&stderr_buf);
+    const stdout = &stdout_writer.interface;
+    const stdin = &stdin_reader.interface;
+    const stderr = &stderr_writer.interface;
 
-test "fuzz example" {
-    const Context = struct {
-        fn testOne(context: @This(), input: []const u8) anyerror!void {
-            _ = context;
-            // Try passing `--fuzz` to `zig build test` and see if it manages to fail this test case!
-            try std.testing.expect(!std.mem.eql(u8, "canyoufindme", input));
-        }
+    const cli = Cli{
+        .stdout = stdout,
+        .stdin = stdin,
+        .stderr = stderr,
     };
-    try std.testing.fuzz(Context{}, Context.testOne, .{});
+
+    try stdout.print("Starting isolation...\n", .{});
+    try stdout.flush();
+
+    try cli.parse_args(allocator);
 }
